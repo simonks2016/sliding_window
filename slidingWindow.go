@@ -208,3 +208,109 @@ func (w *SlidingWindow) MedianPrice() (median float64, ok bool) {
 	mid2 := prices[n/2]
 	return (mid1 + mid2) / 2.0, true
 }
+
+// VolumeWeightedAveragePrice
+// 交易量加权平均交易价格,这个是获取一定时间内根据交易量所得出交易平均价格
+func (w *SlidingWindow) VolumeWeightedAveragePrice() (float64, bool) {
+	if w.size == 0 {
+		return 0, false
+	}
+	var sumPV, sumV float64
+	for i := 0; i < w.size; i++ {
+		p := w.at(i)
+		sumPV += p.Price * p.Volume
+		sumV += p.Volume
+	}
+	if sumV <= 0 {
+		return 0, false
+	}
+	return sumPV / sumV, true
+}
+
+// Score 计算价格趋势 + 动量 + 订单流贝叶斯置信后的综合得分。
+// dirScale: 用于归一化方向收益率，比如 0.005 表示 0.5% 涨跌映射到 ±1。
+// momentumScale: 用于归一化动量值。
+// orderFlowConfidence: 订单流置信因子，约定在 [-1,1]：
+//
+//	>0 偏多，<0 偏空，0 附近表示中性。
+func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float64) (float64, bool) {
+	if dirScale <= 0 || momentumScale <= 0 {
+		return 0, false
+	}
+
+	pOld, pNew, _, ok := w.Snapshot()
+	if !ok {
+		return 0, false
+	}
+
+	// 1. 方向因子：价格从窗口头到尾的收益率
+	side := (pNew - pOld) / pOld
+	dirFactor := side / dirScale
+	if dirFactor > 1 {
+		dirFactor = 1
+	} else if dirFactor < -1 {
+		dirFactor = -1
+	}
+
+	// 2. 动量因子：你的 Momentum 指标（已经包含价格+成交量信息）
+	mom, ok := w.Momentum(w.AvgVolumePerPoint())
+	if !ok {
+		return 0, false
+	}
+	momFactor := mom / momentumScale
+	if momFactor > 1 {
+		momFactor = 1
+	} else if momFactor < -1 {
+		momFactor = -1
+	}
+
+	// 3. 先把“价格侧趋势”合成一个因子（方向 + 力度）
+	trendFactor := 0.5*dirFactor + 0.5*momFactor // [-1,1]
+	if math.Abs(trendFactor) < 1e-8 {
+		// 没有明显趋势，就算订单流有偏向，也不轻易给方向
+		return 0, true
+	}
+
+	// 4. 订单流置信因子裁剪到 [-1,1]
+	if orderFlowConfidence > 1 {
+		orderFlowConfidence = 1
+	} else if orderFlowConfidence < -1 {
+		orderFlowConfidence = -1
+	}
+
+	// 5. “贝叶斯”思想：
+	//    - trendFactor 是“先验方向”：>0 看多，<0 看空
+	//    - orderFlowConfidence 是“似然”：资金是否支持这方向
+	//    → 我们用它来调节“可信度权重”
+	trendSign := 1.0
+	if trendFactor < 0 {
+		trendSign = -1.0
+	}
+	strength := math.Abs(trendFactor) // 趋势力度 [0,1]
+
+	// 6. 置信权重（0~1）：
+	//    confWeight = (1 + trendSign * orderFlowConfidence) / 2
+	//    情况：
+	//      - 趋势向上(trendSign=+1)，订单流也偏多(orderFlowConf>0) → 权重 > 0.5，最高到 1
+	//      - 趋势向上，订单流偏空(orderFlowConf<0) → 权重 < 0.5，极端时到 0（完全不信）
+	//      - 趋势向下(trendSign=-1)，订单流偏空(orderFlowConf<0) → 权重 > 0.5
+	//      - 趋势向下，订单流偏多(orderFlowConf>0) → 权重接近 0
+	confWeight := (1 + trendSign*orderFlowConfidence) / 2
+	if confWeight < 0 {
+		confWeight = 0
+	} else if confWeight > 1 {
+		confWeight = 1
+	}
+
+	// 7. 最终得分：
+	//    - 符号只由“价格趋势方向”决定（trendSign）
+	//    - 绝对值 = 趋势力度 * 订单流可信度
+	score := trendSign * strength * confWeight
+
+	return score, true
+}
+
+const (
+	defaultDirScale      = 0.05
+	defaultMomentumScale = 0.1
+)
