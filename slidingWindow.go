@@ -1,6 +1,7 @@
 package sliding_window
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -286,16 +287,16 @@ func (w *SlidingWindow) VolumeWeightedAveragePrice() (float64, bool) {
 // dirScale: 用于归一化方向收益率，比如 0.005 表示 0.5% 涨跌映射到 ±1。
 // momentumScale: 用于归一化动量值。
 // orderFlowConfidence: 订单流置信因子，约定在 [-1,1]
-func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float64) (float64, bool) {
-	if dirScale <= 0 || momentumScale <= 0 {
-		return 0, false
+func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float64) (float64, error) {
+	if dirScale <= 1e-6 || momentumScale <= 1e-6 {
+		return 0, fmt.Errorf("the dir scale or momentum scale is zero,%.2f,%.2f\n", dirScale, momentumScale)
 	}
 
 	// 为保证一致性，需要在同一个读锁内读取 Snapshot 和 Momentum 所需字段
 	w.mu.RLock()
 	if w.size < 2 {
 		w.mu.RUnlock()
-		return 0, false
+		return 0, fmt.Errorf("the momentum size is too small,%d\n", w.size)
 	}
 	pOld := w.atUnlocked(0).Price
 	pNew := w.lastUnlocked().Price
@@ -318,10 +319,6 @@ func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float
 	// 计算 mom：直接在此处计算，与之前的 Momentum 逻辑一致（但在同一把锁内）
 	// 为了与原函数一致，使用 AvgVolumePerPoint（在读锁内安全）
 	var mom float64
-	if w.size < 2 {
-		w.mu.RUnlock()
-		return 0, false
-	}
 	old := w.atUnlocked(0)
 	newest := w.lastUnlocked()
 	ret := 0.0
@@ -351,7 +348,7 @@ func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float
 
 	trendFactor := 0.5*dirFactor + 0.5*momFactor
 	if math.Abs(trendFactor) < 1e-8 {
-		return 0, true
+		return 0, nil
 	}
 
 	if orderFlowConfidence > 1 {
@@ -374,7 +371,7 @@ func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float
 	}
 
 	score := trendSign * strength * confWeight
-	return score, true
+	return score, nil
 }
 
 const (
