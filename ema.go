@@ -27,3 +27,11 @@ func (e *EMA) Update(x float64) float64 {
 	e.Value = e.Alpha*x + (1-e.Alpha)*e.Value
 	return e.Value
 }
+
+func (e *EMA) Get() (float64, bool) {
+
+	if !e.Initialized {
+		return 0, false
+	}
+	return e.Value, true
+}

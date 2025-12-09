@@ -15,12 +15,14 @@ type SlidingWindow struct {
 	size      int           // 当前有效元素个数
 	sumVolume float64       // 窗口内成交量总和
 	mu        sync.RWMutex  // 并发安全
+	ema       *EMA
 }
 
-func NewSlidingWindow(duration time.Duration, capacity int) *SlidingWindow {
+func NewSlidingWindow(duration time.Duration, capacity int, emaAlpha float64) *SlidingWindow {
 	return &SlidingWindow{
 		duration: duration,
 		buf:      make([]WindowPoint, capacity),
+		ema:      NewEMA(emaAlpha),
 	}
 }
 
@@ -86,6 +88,9 @@ func (w *SlidingWindow) Add(p WindowPoint) {
 		w.start = (w.start + 1) % len(w.buf)
 		w.size--
 	}
+	if p.Volume > 0 {
+		w.ema.Update(p.Volume)
+	}
 }
 
 // Ready 真实（读锁）
@@ -115,18 +120,42 @@ func (w *SlidingWindow) SumVolume() float64 {
 	return w.sumVolume
 }
 
-// Momentum 计算简单“价格 + 量能”动能因子 avgVolume 建议用 EMA.Value 作为参考平均成交量
-func (w *SlidingWindow) Momentum(avgVolume float64) (momentum float64, ok bool) {
-	if avgVolume <= 0 {
+func (w *SlidingWindow) VolumeFactor() (float64, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	baselineVol, ok := w.ema.Get()
+	if !ok {
 		return 0, false
 	}
+
+	if w.size == 0 || baselineVol <= 0 {
+		return 0, false
+	}
+
+	currAvg := w.sumVolume / float64(w.size) // 当前窗口平均每笔/每点成交量
+	if currAvg <= 0 {
+		return 0, false
+	}
+
+	vf := currAvg / baselineVol
+	if vf < 0 {
+		return 0, false
+	}
+	return vf, true
+}
+
+// Momentum 计算简单“价格 + 量能”动能因子 avgVolume 建议用 EMA.Value 作为参考平均成交量
+func (w *SlidingWindow) Momentum() (momentum float64, ok bool) {
 
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	if w.size < 2 {
+	VolFactor, ok := w.VolumeFactor()
+	if !ok || w.size < 2 {
 		return 0, false
 	}
+
 	old := w.atUnlocked(0)
 	newest := w.lastUnlocked()
 
@@ -136,14 +165,8 @@ func (w *SlidingWindow) Momentum(avgVolume float64) (momentum float64, ok bool) 
 	}
 	ret := (newest.Price - old.Price) / old.Price
 
-	// 成交量放大倍数
-	volFactor := w.sumVolume / avgVolume
-	if volFactor < 0 {
-		volFactor = 0
-	}
-
 	// 动能 = 收益率 * log(1 + volFactor)
-	m := ret * math.Log1p(volFactor)
+	m := ret * math.Log1p(VolFactor)
 
 	return m, true
 }
