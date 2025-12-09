@@ -306,11 +306,12 @@ func (w *SlidingWindow) VolumeWeightedAveragePrice() (float64, bool) {
 	return sumPV / sumV, true
 }
 
-// Score 计算价格趋势 + 动量 + 订单流贝叶斯置信后的综合得分。
+// ScoreWithMomentum 计算价格趋势 + 动量 + 订单流贝叶斯置信后的综合得分。
+// currentMomentum: 当前动量因子
 // dirScale: 用于归一化方向收益率，比如 0.005 表示 0.5% 涨跌映射到 ±1。
 // momentumScale: 用于归一化动量值。
 // orderFlowConfidence: 订单流置信因子，约定在 [-1,1]
-func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float64) (float64, error) {
+func (w *SlidingWindow) ScoreWithMomentum(currentMomentum, dirScale, momentumScale, orderFlowConfidence float64) (float64, error) {
 	if dirScale <= 1e-6 || momentumScale <= 1e-6 {
 		return 0, fmt.Errorf("the dir scale or momentum scale is zero,%.2f,%.2f\n", dirScale, momentumScale)
 	}
@@ -332,37 +333,15 @@ func (w *SlidingWindow) Score(dirScale, momentumScale, orderFlowConfidence float
 		// 避免除以0
 		side = 0
 	}
+	// 计算价格方向
 	dirFactor := side / dirScale
 	if dirFactor > 1 {
 		dirFactor = 1
 	} else if dirFactor < -1 {
 		dirFactor = -1
 	}
-
-	// 计算 mom：直接在此处计算，与之前的 Momentum 逻辑一致（但在同一把锁内）
-	// 为了与原函数一致，使用 AvgVolumePerPoint（在读锁内安全）
-	var mom float64
-	old := w.atUnlocked(0)
-	newest := w.lastUnlocked()
-	ret := 0.0
-	if old.Price != 0 {
-		ret = (newest.Price - old.Price) / old.Price
-	}
-	avgVolPerPoint := 0.0
-	if w.size > 0 {
-		avgVolPerPoint = w.sumVolume / float64(w.size)
-	}
-	volFactor := 0.0
-	if avgVolPerPoint > 0 {
-		volFactor = w.sumVolume / avgVolPerPoint
-		if volFactor < 0 {
-			volFactor = 0
-		}
-	}
-	mom = ret * math.Log1p(volFactor)
-	w.mu.RUnlock()
-
-	momFactor := mom / momentumScale
+	// 引入外部动量
+	momFactor := currentMomentum / momentumScale
 	if momFactor > 1 {
 		momFactor = 1
 	} else if momFactor < -1 {
