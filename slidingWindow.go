@@ -120,9 +120,8 @@ func (w *SlidingWindow) SumVolume() float64 {
 	return w.sumVolume
 }
 
-func (w *SlidingWindow) VolumeFactor() (float64, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+// 无锁版计算交易量基准
+func (w *SlidingWindow) volumeFactor() (float64, bool) {
 
 	baselineVol, ok := w.ema.Get()
 	if !ok {
@@ -143,6 +142,15 @@ func (w *SlidingWindow) VolumeFactor() (float64, bool) {
 		return 0, false
 	}
 	return vf, true
+
+}
+
+// VolumeFactor 带锁计算交易量基准
+func (w *SlidingWindow) VolumeFactor() (float64, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	return w.volumeFactor()
 }
 
 // Momentum 计算简单“价格 + 量能”动能因子 avgVolume 建议用 EMA.Value 作为参考平均成交量
@@ -151,7 +159,7 @@ func (w *SlidingWindow) Momentum() (momentum float64, ok bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	VolFactor, ok := w.VolumeFactor()
+	VolFactor, ok := w.volumeFactor()
 	if !ok || w.size < 2 {
 		return 0, false
 	}
@@ -318,8 +326,9 @@ func (w *SlidingWindow) ScoreWithMomentum(currentMomentum, dirScale, momentumSca
 
 	// 为保证一致性，需要在同一个读锁内读取 Snapshot 和 Momentum 所需字段
 	w.mu.RLock()
+	defer w.mu.RUnlock()
+
 	if w.size < 2 {
-		w.mu.RUnlock()
 		return 0, fmt.Errorf("the momentum size is too small,%d\n", w.size)
 	}
 	pOld := w.atUnlocked(0).Price
