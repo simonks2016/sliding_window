@@ -119,7 +119,6 @@ func (w *SlidingWindow) refreshVolumeCachesUnlocked() {
 	w.volPerSecond.Store(int64(vps))
 }
 
-
 // Add 添加一个点并自动清理超出时间窗口的旧点（写锁）
 func (w *SlidingWindow) Add(p ...WindowPoint) {
 	w.mu.Lock()
@@ -130,7 +129,7 @@ func (w *SlidingWindow) Add(p ...WindowPoint) {
 }
 
 // AddWindowPoint 添加一个点并自动清理超出时间窗口的旧点（写锁）
-func (w *SlidingWindow) AddWindowPoint(price, size float64, ts time.Time) {
+func (w *SlidingWindow) AddWindowPoint(side Side, price, size float64, ts time.Time) {
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -139,6 +138,7 @@ func (w *SlidingWindow) AddWindowPoint(price, size float64, ts time.Time) {
 		Ts:     ts,
 		Price:  NewQtyLoz(price, w.priceScale),
 		Volume: NewQtyLoz(size, w.volumeScale),
+		Side:   side,
 	})
 	return
 }
