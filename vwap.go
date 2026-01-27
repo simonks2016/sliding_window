@@ -12,6 +12,11 @@ func (w *SlidingWindow) VolumeWeightedAveragePrice() (float64, bool) {
 		return 0, false
 	}
 
+	return w.vwap(stats)
+}
+
+func (w *SlidingWindow) vwap(stats WindowStats) (float64, bool) {
+
 	if stats.SumV <= 0 {
 		return 0, false
 	}
