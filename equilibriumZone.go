@@ -1,7 +1,6 @@
 package sliding_window
 
 import (
-	"fmt"
 	"math"
 	"sort"
 )
@@ -25,23 +24,17 @@ type WindowStats struct {
 	Prices []float64
 }
 
-func (w *SlidingWindow) collectStats(prices []float64) (WindowStats, bool) {
+func (w *SlidingWindow) collectStats() (WindowStats, bool) {
 	var stats WindowStats
 
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
 	if w.size < 2 {
-
-		fmt.Printf("window size is less than 2,%d", w.size)
 		return stats, false
 	}
-	if len(prices) < w.size {
-
-		fmt.Printf("prices size is less than windows size,%d,%d", w.size, len(prices))
-
-		return stats, false
-	}
+	prices, p1 := w.getPricesBuf(w.size)
+	defer w.putPricesBuf(p1)
 
 	n := w.size
 	stats.Prices = prices[:n] // ✅ 关键：把 stats.Prices 指向外部 buffer

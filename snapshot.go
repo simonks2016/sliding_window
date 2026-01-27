@@ -1,7 +1,6 @@
 package sliding_window
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -38,21 +37,15 @@ func (w *SlidingWindow) Snapshot() *Snapshot {
 	latestPrice := w.LatestPrice.Load()
 	nTrades := w.nTrades.Load()
 
-	// 这些如果内部会扫窗口/加锁：尽量只调用一次
-	n := w.size
-	prices, p1 := w.getPricesBuf(n)
-	defer w.putPricesBuf(p1)
-
-	stat, ok := w.collectStats(prices)
+	stat, ok := w.collectStats()
 	if !ok {
-		fmt.Println("snapshot not found in sliding window")
 		return nil
 	}
 
 	vwap, _ := w.vwap(stat)
-	//momentum, _ := w.Momentum()
-	//bs, _ := w.BreakoutStrength()
-	//ez, _ := w.EquilibriumZone(0.4, 0.5)
+	momentum, _ := w.Momentum()
+	bs, _ := w.breakoutStrength(stat)
+	ez, _ := w.EquilibriumZone(0.4, 0.5)
 
 	// ===== 新增三项 =====
 	deltaVol := w.DeltaVolume()
@@ -76,19 +69,19 @@ func (w *SlidingWindow) Snapshot() *Snapshot {
 		DeltaVolume:                deltaVol,
 		Imbalance:                  imb,
 		Volatility:                 rv,
-		Momentum:                   0.0,
-		//Strength:                   bs.Strength,
-		//StrengthNorm:               bs.StrengthNorm,
-		//EquPrice:                   ez.EquPrice,
-		//UpperBand:                  ez.UpperBand,
-		//LowerBand:                  ez.LowerBand,
-		//BandWidth:                  ez.BandWidth,
-		//Price:                      ez.Price,
-		//Distance:                   ez.Distance,
-		//NormDist:                   ez.NormDist,
-		NTrades:    nTrades,
-		Ts:         time.Now().UnixMilli(),
-		WindowMs:   w.duration.Milliseconds(),
-		DurationMs: w.duration.Milliseconds(),
+		Momentum:                   momentum,
+		Strength:                   bs.Strength,
+		StrengthNorm:               bs.StrengthNorm,
+		EquPrice:                   ez.EquPrice,
+		UpperBand:                  ez.UpperBand,
+		LowerBand:                  ez.LowerBand,
+		BandWidth:                  ez.BandWidth,
+		Price:                      ez.Price,
+		Distance:                   ez.Distance,
+		NormDist:                   ez.NormDist,
+		NTrades:                    nTrades,
+		Ts:                         time.Now().UnixMilli(),
+		WindowMs:                   w.duration.Milliseconds(),
+		DurationMs:                 w.duration.Milliseconds(),
 	}
 }

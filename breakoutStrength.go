@@ -11,20 +11,22 @@ type BreakoutStrength struct {
 }
 
 func (w *SlidingWindow) BreakoutStrength() (BreakoutStrength, bool) {
-	var empty BreakoutStrength
 
+	// collectStats：锁内把 prices[0:n] 填满（float 价格），并统计 sumPV/sumV 等
+	stats, ok := w.collectStats()
+	if !ok {
+		return BreakoutStrength{}, false
+	}
+
+	return w.breakoutStrength(stats)
+}
+
+func (w *SlidingWindow) breakoutStrength(stats WindowStats) (BreakoutStrength, bool) {
+
+	var empty BreakoutStrength
 	// 先快照 size，用它申请 buf（collectStats 内部会加锁）
 	n := w.size
 	if n < 2 {
-		return empty, false
-	}
-
-	prices, pb := w.getPricesBuf(n)
-	defer w.putPricesBuf(pb)
-
-	// collectStats：锁内把 prices[0:n] 填满（float 价格），并统计 sumPV/sumV 等
-	stats, ok := w.collectStats(prices)
-	if !ok {
 		return empty, false
 	}
 
@@ -80,4 +82,5 @@ func (w *SlidingWindow) BreakoutStrength() (BreakoutStrength, bool) {
 		Strength:     s,
 		StrengthNorm: strNorm,
 	}, true
+
 }

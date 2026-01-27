@@ -4,13 +4,16 @@ import "sort"
 
 // MedianPrice  对外带锁，锁内只复制，锁外排序计算
 func (w *SlidingWindow) MedianPrice() (float64, bool) {
-	prices, p1 := w.getPricesBuf(w.size)
 
-	stats, ok := w.collectStats(prices) // collectStats 内部把 prices 填满
+	stats, ok := w.collectStats() // collectStats 内部把 prices 填满
 	if !ok {
-		w.putPricesBuf(p1)
 		return 0, false
 	}
+
+	return w.medianPrice(stats)
+}
+
+func (w *SlidingWindow) medianPrice(stats WindowStats) (float64, bool) {
 
 	// 直接对 prices 排序（它就是 stats.Prices）
 	sort.Float64s(stats.Prices)
@@ -22,7 +25,5 @@ func (w *SlidingWindow) MedianPrice() (float64, bool) {
 	} else {
 		med = (stats.Prices[n/2-1] + stats.Prices[n/2]) / 2.0
 	}
-
-	w.putPricesBuf(p1)
 	return med, true
 }
