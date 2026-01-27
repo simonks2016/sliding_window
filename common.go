@@ -4,6 +4,10 @@ import "math"
 
 func (w *SlidingWindow) structuralReturn() (float64, bool) {
 
+	if w.size <= 0 || len(w.buf) <= 0 {
+		return 0, false
+	}
+
 	old := w.atUnlocked(0)
 	newest := w.lastUnlocked()
 

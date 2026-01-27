@@ -17,5 +17,5 @@ func (w *SlidingWindow) VolumeWeightedAveragePrice() (float64, bool) {
 	}
 
 	// 转回真实价格
-	return float64(stats.SumPV) / float64(stats.SumV), true
+	return stats.SumPV / stats.SumV, true
 }
