@@ -1,6 +1,7 @@
 package sliding_window
 
 import (
+	"fmt"
 	"math"
 	"sort"
 )
@@ -31,9 +32,14 @@ func (w *SlidingWindow) collectStats(prices []float64) (WindowStats, bool) {
 	defer w.mu.RUnlock()
 
 	if w.size < 2 {
+
+		fmt.Printf("window size is less than 2,%d", w.size)
 		return stats, false
 	}
 	if len(prices) < w.size {
+
+		fmt.Printf("prices size is less than windows size,%d,%d", w.size, len(prices))
+
 		return stats, false
 	}
 
