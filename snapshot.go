@@ -1,6 +1,7 @@
 package sliding_window
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -44,7 +45,11 @@ func (w *SlidingWindow) Snapshot() *Snapshot {
 
 	vwap, _ := w.vwap(stat)
 	momentum, _ := w.Momentum()
-	bs, _ := w.breakoutStrength(stat)
+	bs, ok := w.breakoutStrength(stat)
+	if !ok {
+		fmt.Println("Breakout Strength is nil")
+	}
+
 	ez, _ := w.EquilibriumZone(0.4, 0.5)
 
 	// ===== 新增三项 =====
