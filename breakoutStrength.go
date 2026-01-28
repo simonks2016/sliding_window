@@ -1,7 +1,5 @@
 package sliding_window
 
-import "fmt"
-
 type BreakoutStrength struct {
 	High         float64
 	Low          float64
@@ -29,7 +27,6 @@ func (w *SlidingWindow) breakoutStrength(stats WindowStats) (BreakoutStrength, b
 	// 先快照 size，用它申请 buf（collectStats 内部会加锁）
 	n := w.size
 	if n < 2 {
-		fmt.Println("the size of sliding window is less than 2")
 		return empty, false
 	}
 
