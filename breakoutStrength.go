@@ -22,22 +22,18 @@ func (w *SlidingWindow) BreakoutStrength() (BreakoutStrength, bool) {
 }
 
 func (w *SlidingWindow) breakoutStrength(stats WindowStats) (BreakoutStrength, bool) {
-
 	var empty BreakoutStrength
-	// 先快照 size，用它申请 buf（collectStats 内部会加锁）
-	n := w.size
+
+	n := len(stats.Prices)
 	if n < 2 {
 		return empty, false
 	}
 
-	// prices = stats.Prices，本身就是 float 价格（已按 scale 转换）
-	// newest 是窗口最后一个点
 	price := stats.Prices[n-1]
 
-	// high/low 用前 n-1 个点（排除 newest）
 	high := stats.Prices[0]
 	low := stats.Prices[0]
-	for i := 1; i < n-1; i++ {
+	for i := 1; i < n-1; i++ { // 排除 newest
 		px := stats.Prices[i]
 		if px > high {
 			high = px
@@ -52,7 +48,6 @@ func (w *SlidingWindow) breakoutStrength(stats WindowStats) (BreakoutStrength, b
 		return empty, false
 	}
 
-	// Pos01：price 在 [low, high] 中的位置（越靠上越接近 1）
 	pos := (price - low) / rng
 	if pos < 0 {
 		pos = 0
@@ -60,18 +55,12 @@ func (w *SlidingWindow) breakoutStrength(stats WindowStats) (BreakoutStrength, b
 		pos = 1
 	}
 
-	// Strength：突破距离（与价格同单位），区间内为 0，区间外为正/负
-	var s float64
+	s := 0.0
 	if price > high {
 		s = price - high
 	} else if price < low {
 		s = -(low - price)
-	} else {
-		s = 0
 	}
-
-	// 标准化突破：无量纲
-	strNorm := s / rng
 
 	return BreakoutStrength{
 		High:         high,
@@ -80,7 +69,6 @@ func (w *SlidingWindow) breakoutStrength(stats WindowStats) (BreakoutStrength, b
 		Range:        rng,
 		Pos01:        pos,
 		Strength:     s,
-		StrengthNorm: strNorm,
+		StrengthNorm: s / rng,
 	}, true
-
 }
